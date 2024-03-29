@@ -1,0 +1,22 @@
+{
+  "name": "archive-support",
+  "module": "./src/index.ts",
+  "type": "module",
+  "scripts": {
+    "start": "bun ./src/index.ts",
+    "db:generate": "prisma generate",
+    "db:push": "prisma db push --skip-generate"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.30",
+    "bun-types": "latest",
+    "discord-api-types": "^0.37.77",
+    "prisma": "^5.11.0"
+  },
+  "peerDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "@segment/analytics-node": "^2.1.0"
+  }
+}

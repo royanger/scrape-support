@@ -1,0 +1,134 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["fullTextSearch", "fullTextIndex"]
+}
+
+datasource db {
+  provider     = "mysql"
+  url          = env("DATABASE_URL")
+  relationMode = "prisma"
+}
+
+model User {
+  id              String         @id @unique @default(uuid())
+  userId          String?        @unique
+  discordId       String?        @unique
+  discordUsername String?
+  discordAvatarId String?
+  banned          Boolean        @default(false)
+  deleted         Boolean        @default(false)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  ticketStatus    TicketStatus[]
+  Thread          Thread[]
+  Message         Message[]
+  Onboarding      Onboarding[]
+}
+
+// formally TagName -- will need to be renamed/migrated to handle current prod data
+model Tag {
+  id        String         @id @unique
+  name      String
+  type      String?
+  fullName  String?
+  ThreadTag ThreadTag[]
+  Ticket    TicketStatus[]
+}
+
+model TicketStatus {
+  id        String   @id @unique @default(uuid())
+  msgId     String   @unique
+  tagId     String
+  tag       Tag      @relation(fields: [tagId], references: [id])
+  type      String   @default("discord")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  authorId  String
+  author    User     @relation(fields: [authorId], references: [discordId])
+
+  @@index([authorId])
+  @@index([tagId])
+}
+
+model Onboarding {
+  id         String   @id @unique @default(uuid())
+  userId     String   @unique
+  user       User     @relation(fields: [userId], references: [userId])
+  heardAbout String
+  other      String?
+  eap        Boolean
+  projects   Json
+  frameworks Json
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt()
+
+  @@index([userId])
+}
+
+model Thread {
+  id            String      @id
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  timestamp     DateTime
+  title         String      @db.LongText
+  isPublic      Boolean     @default(false)
+  discordId     String
+  author        User        @relation(fields: [discordId], references: [discordId])
+  lastMessageId String?
+  slug          String?     @unique
+  tags          ThreadTag[]
+  messages      Message[]
+
+  @@index([discordId])
+  @@fulltext([title])
+}
+
+// Formally the Tag table
+model ThreadTag {
+  id       String @id
+  tagId    String
+  tag      Tag    @relation(fields: [tagId], references: [id])
+  threadId String
+  thread   Thread @relation(fields: [threadId], references: [id])
+
+  @@index([threadId])
+  @@index([tagId])
+}
+
+model Message {
+  id        String     @id
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  content   String     @db.LongText
+  timestamp DateTime
+  threadId  String
+  thread    Thread     @relation(fields: [threadId], references: [id])
+  reactions Reaction[]
+  images    Image[]
+  discordId String
+  user      User       @relation(fields: [discordId], references: [discordId])
+
+  @@index([threadId])
+  @@fulltext([content])
+}
+
+model Reaction {
+  id         String  @id
+  animated   Boolean @default(false)
+  name       String? // how often do we not get a name?
+  identifier String?
+  messageId  String
+  message    Message @relation(fields: [messageId], references: [id])
+
+  @@index([messageId])
+}
+
+// anything at all that would serve as a name/info for an alt tag?
+model Image {
+  id        String  @id
+  url       String  @db.LongText
+  messageId String
+  message   Message @relation(fields: [messageId], references: [id])
+
+  @@index([messageId])
+}
