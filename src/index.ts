@@ -1,5 +1,4 @@
 import { APIThreadChannel, APIMessage } from "discord-api-types/v10";
-import { env } from "process";
 
 console.log("Hi Jacob!");
 
@@ -9,7 +8,7 @@ async function cooldown() {
 
 const fetchThreads = async (before?: string) => {
   const res = await fetch(
-    `https://discord.com/api/v10/channels/${Bun.env.DISCORD_SERVER}/threads/archived/public${before !== undefined ? `?before=${before}` : ""}`,
+    `https://discord.com/api/v10/channels/${Bun.env.DISCORD_FORUM}/threads/archived/public${before !== undefined ? `?before=${before}` : ""}`,
     {
       headers: {
         method: "GET",
