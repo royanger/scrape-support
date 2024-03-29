@@ -128,6 +128,8 @@ model Image {
   id        String  @id
   url       String  @db.LongText
   messageId String
+  width     Int?
+  height    Int?
   message   Message @relation(fields: [messageId], references: [id])
 
   @@index([messageId])

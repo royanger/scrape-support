@@ -17,6 +17,8 @@
     "typescript": "^5.0.0"
   },
   "dependencies": {
-    "@segment/analytics-node": "^2.1.0"
+    "@prisma/client": "5.11.0",
+    "@segment/analytics-node": "^2.1.0",
+    "prisma-extension-create-with-slug": "^0.0.5"
   }
 }

@@ -1,6 +1,10 @@
 import { APIThreadChannel, APIMessage } from "discord-api-types/v10";
+import { PrismaClient } from "@prisma/client";
+import { createWithSlugFn } from "prisma-extension-create-with-slug";
 
 console.log("Hi Jacob!");
+
+const prisma = new PrismaClient().$extends(createWithSlugFn());
 
 async function cooldown() {
   await new Promise((r) => setTimeout(r, 100));
@@ -44,9 +48,10 @@ const fetchMessages = async (threadId: string) => {
 
 let count = 0;
 const processThreads = async (before?: string) => {
+  console.log("Starting block of threads");
   let results = [];
 
-  // get the timestamp of the last thread processed, to used in following query
+  // store the timestamp of the last thread processed, to used in following query
   let lastTimestamp = "";
 
   const { threads, first_messages, has_more } = await fetchThreads(before);
@@ -108,8 +113,9 @@ const processThreads = async (before?: string) => {
         title: threads[i].name,
         discordId: threads[i].owner_id,
         createdAt: threads[i].thread_metadata?.create_timestamp,
+        lastMessageId: threads[i].last_message_id,
         user: {
-          discordId: threads[i].id,
+          discordId: threads[i].owner_id,
           discordUsername:
             first_messages[i] && first_messages[i].author.username,
           discordAvatarId: first_messages[i] && first_messages[i].author.avatar,
@@ -118,6 +124,143 @@ const processThreads = async (before?: string) => {
         tags: threads[i].applied_tags,
       },
     };
+
+    await prisma.$transaction(
+      async (tx) => {
+        try {
+          await tx.user.upsert({
+            where: {
+              discordId: res.thread.user.discordId,
+            },
+            create: {
+              discordId: res.thread.user.discordId,
+              discordUsername: res.thread.user.discordUsername,
+              discordAvatarId: res.thread.user.discordAvatarId,
+            },
+            update: {
+              discordId: res.thread.user.discordId,
+              discordUsername: res.thread.user.discordUsername,
+              discordAvatarId: res.thread.user.discordAvatarId,
+            },
+          });
+        } catch (err) {
+          console.log("Error:", err);
+        }
+
+        try {
+          await tx.thread.upsert({
+            where: {
+              id: res.thread.id,
+            },
+            create: {
+              id: res.thread.id,
+              title: res.thread.title,
+              discordId: res.thread.user.discordId!,
+              lastMessageId: res.thread.lastMessageId,
+              createdAt: res.thread.createdAt,
+              timestamp: res.thread.createdAt
+                ? res.thread.createdAt
+                : new Date(),
+            },
+            update: {
+              title: res.thread.title,
+              discordId: res.thread.discordId,
+              lastMessageId: res.thread.lastMessageId,
+              createdAt: res.thread.createdAt,
+            },
+          });
+        } catch (err) {
+          console.log("Error:", err);
+        }
+
+        for (let txm = 0; txm < res.thread.messages.length; txm++) {
+          const timestamp = res.thread.messages[txm].updatedAt
+            ? res.thread.messages[txm].updatedAt
+            : new Date();
+          try {
+            await tx.message.upsert({
+              where: {
+                id: res.thread.messages[txm].id,
+              },
+              create: {
+                id: res.thread.messages[txm].id,
+                content: res.thread.messages[txm].content,
+                threadId: res.thread.messages[txm].threadId,
+                timestamp: timestamp!,
+                discordId: res.thread.messages[txm].discordId,
+              },
+              update: {
+                content: res.thread.messages[txm].content,
+                threadId: res.thread.messages[txm].threadId,
+                timestamp: timestamp!,
+                discordId: res.thread.messages[txm].discordId,
+              },
+            });
+          } catch (err) {
+            console.log("Error:", err);
+          }
+
+          for (
+            let txi = 0;
+            txi < res.thread.messages[txm].images.length;
+            txi++
+          ) {
+            try {
+              await tx.image.upsert({
+                where: {
+                  id: res.thread.messages[txm].images[txi].id,
+                },
+                create: {
+                  id: res.thread.messages[txm].images[txi].id,
+                  url: res.thread.messages[txm].images[txi].url,
+                  messageId: res.thread.messages[txm].id,
+                  height: res.thread.messages[txm].images[txi].height,
+                  width: res.thread.messages[txm].images[txi].width,
+                },
+                update: {
+                  url: res.thread.messages[txm].images[txi].url,
+                  messageId: res.thread.messages[txm].id,
+                  height: res.thread.messages[txm].images[txi].height,
+                  width: res.thread.messages[txm].images[txi].width,
+                },
+              });
+            } catch (err) {
+              console.log("Error:", err);
+            }
+          }
+
+          for (
+            let txr = 0;
+            txr < res.thread.messages[txm].reactions.length;
+            txr++
+          ) {
+            try {
+              await tx.reaction.upsert({
+                where: {
+                  id: `${res.thread.messages[txm].reactions[txr].name}-${res.thread.messages[txm].id}`,
+                },
+                create: {
+                  id: `${res.thread.messages[txm].reactions[txr].name}-${res.thread.messages[txm].id}`,
+                  animated: res.thread.messages[txm].reactions[txr].animated,
+                  name: res.thread.messages[txm].reactions[txr].name,
+                  messageId: res.thread.messages[txm].id,
+                },
+                update: {
+                  animated: res.thread.messages[txm].reactions[txr].animated,
+                  name: res.thread.messages[txm].reactions[txr].name,
+                },
+              });
+            } catch (err) {
+              console.log("Error:", err);
+            }
+          }
+        }
+      },
+      {
+        timeout: 15000,
+      },
+    );
+
     count++;
 
     lastTimestamp = threads[i].thread_metadata?.archive_timestamp
@@ -128,11 +271,11 @@ const processThreads = async (before?: string) => {
     results.push(res);
   }
 
-  console.log("has more", has_more);
+  console.log("has more", has_more, lastTimestamp);
   if (has_more) {
     processThreads(lastTimestamp);
   } else {
-    console.log(results);
+    console.log("Done");
   }
 };
 
