@@ -1,6 +1,6 @@
 generator client {
   provider        = "prisma-client-js"
-  previewFeatures = ["fullTextSearch", "fullTextIndex"]
+  previewFeatures = ["fullTextSearch", "fullTextIndex", "relationJoins"]
 }
 
 datasource db {
@@ -68,14 +68,13 @@ model Onboarding {
 model Thread {
   id            String      @id
   createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
-  timestamp     DateTime
+  updatedAt     DateTime?
   title         String      @db.LongText
   isPublic      Boolean     @default(false)
   discordId     String
   author        User        @relation(fields: [discordId], references: [discordId])
   lastMessageId String?
-  slug          String?     @unique
+  slug          String      @unique
   tags          ThreadTag[]
   messages      Message[]
 
@@ -96,41 +95,29 @@ model ThreadTag {
 }
 
 model Message {
-  id        String     @id
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
-  content   String     @db.LongText
-  timestamp DateTime
-  threadId  String
-  thread    Thread     @relation(fields: [threadId], references: [id])
-  reactions Reaction[]
-  images    Image[]
-  discordId String
-  user      User       @relation(fields: [discordId], references: [discordId])
+  id          String       @id
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime?
+  content     String       @db.LongText
+  threadId    String
+  thread      Thread       @relation(fields: [threadId], references: [id])
+  attachments Attachment[]
+  discordId   String
+  user        User         @relation(fields: [discordId], references: [discordId])
 
   @@index([threadId])
   @@fulltext([content])
 }
 
-model Reaction {
-  id         String  @id
-  animated   Boolean @default(false)
-  name       String? // how often do we not get a name?
-  identifier String?
-  messageId  String
-  message    Message @relation(fields: [messageId], references: [id])
-
-  @@index([messageId])
-}
-
 // anything at all that would serve as a name/info for an alt tag?
-model Image {
-  id        String  @id
-  url       String  @db.LongText
-  messageId String
-  width     Int?
-  height    Int?
-  message   Message @relation(fields: [messageId], references: [id])
+model Attachment {
+  id          String  @id
+  url         String  @db.LongText
+  messageId   String
+  width       Int?
+  height      Int?
+  contentType String?
+  message     Message @relation(fields: [messageId], references: [id])
 
   @@index([messageId])
 }

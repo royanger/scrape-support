@@ -1,13 +1,7 @@
 import { APIThreadChannel, APIMessage } from "discord-api-types/v10";
-import { PrismaClient } from "@prisma/client";
-import { createWithSlugFn } from "prisma-extension-create-with-slug";
-
-console.log("Hi Jacob!");
-
-const prisma = new PrismaClient().$extends(createWithSlugFn());
 
 async function cooldown() {
-  await new Promise((r) => setTimeout(r, 100));
+  await new Promise((r) => setTimeout(r, 200));
 }
 
 const fetchThreads = async (before?: string) => {
@@ -30,16 +24,20 @@ const fetchThreads = async (before?: string) => {
   };
 };
 
-const fetchMessages = async (threadId: string) => {
-  const res = await fetch(
-    `https://discord.com/api/v10/channels/${threadId}/messages`,
-    {
-      headers: {
-        method: "GET",
-        Authorization: `Bot ${Bun.env.DISCORD_TOKEN}`,
-      },
+const fetchMessages = async (threadId: string, beforeId?: string) => {
+  let url = "";
+  if (beforeId) {
+    url = `https://discord.com/api/v10/channels/${threadId}/messages?before=${beforeId}&limit=100`;
+  } else {
+    url = `https://discord.com/api/v10/channels/${threadId}/messages?limit=100`;
+  }
+
+  const res = await fetch(url, {
+    headers: {
+      method: "GET",
+      Authorization: `Bot ${Bun.env.DISCORD_TOKEN}`,
     },
-  );
+  });
   if (!res.ok) {
     console.log("error fetching messages:", res.statusText);
   }
@@ -47,234 +45,158 @@ const fetchMessages = async (threadId: string) => {
 };
 
 let count = 0;
+let block = 1;
+let results = [];
+
 const processThreads = async (before?: string) => {
   console.log("Starting block of threads");
-  let results = [];
 
   // store the timestamp of the last thread processed, to used in following query
   let lastTimestamp = "";
 
+  // Fetch a block of up to 50 threads
   const { threads, first_messages, has_more } = await fetchThreads(before);
 
+  // start for loop to run for each thread
   for (let i = 0; i < threads.length; i++) {
-    const messages = await fetchMessages(threads[i].id);
+    // console.log(
+    //   "===================================================================",
+    // );
+    // console.log("Thread array position", i);
+    // console.log(
+    //   "===================================================================",
+    // );
+    // console.log(
+    //   "===================================================================",
+    // );
+    if (threads[i].thread_metadata?.locked === false) {
+      let messages: APIMessage[] = [];
 
-    let messageResults = [];
+      // fetch messages for a thread -- come in up to 50 messages
+      // need to check and fetch again if result === 100
+      const fetchAllMessages = async (threadId: string, beforeId?: string) => {
+        await cooldown();
 
-    for (let m = 0; m < messages.length; m++) {
-      let images = [];
-      if (messages[m].attachments.length > 0) {
-        for (let a = 0; a < messages[m].attachments.length; a++) {
-          const imageObj = {
-            id: messages[m].attachments[a].id,
-            url: messages[m].attachments[a].url,
-            width: messages[m].attachments[a].width,
-            height: messages[m].attachments[a].height,
-            filename: messages[m].attachments[a].filename,
-          };
-          images.push(imageObj);
-          cooldown();
+        // Fetch up to 100 messages, use recursion to continue until all messages for thread fetched
+        const res = await fetchMessages(threadId, beforeId);
+        if (res.length === 100) {
+          console.log("Received 100 messages, attepting to fetch next block");
+          // length starts 1 on, but array starts at 0. This is the 100th message
+          const beforeId = res[99].id;
+          fetchAllMessages(threadId, beforeId);
         }
-      }
 
-      let reactions = [];
-      if (messages[m].reactions && messages[m]?.reactions?.length > 0) {
-        for (let r = 0; r < messages[m]?.reactions?.length; r++) {
-          const reactionObj = {
-            name: messages[m]?.reactions[r]?.emoji.name,
-            animated: messages[m]?.reactions[r]?.emoji.animated,
-          };
-          reactions.push(reactionObj);
-          cooldown();
+        messages = messages.concat(res);
+        return messages;
+      };
+
+      // start fetching messages
+      await fetchAllMessages(threads[i].id);
+      await cooldown();
+
+      // create arrays to fill with the data to export
+      let messageResults = [];
+      let userResults = [];
+
+      for (let m = 0; m < messages.length; m++) {
+        // fetch attachments for the message
+        let attachments = [];
+        if (messages[m].attachments.length > 0) {
+          for (let a = 0; a < messages[m].attachments.length; a++) {
+            const attachmentObj = {
+              id: messages[m].attachments[a].id,
+              url: messages[m].attachments[a].url,
+              width: messages[m].attachments[a].width,
+              height: messages[m].attachments[a].height,
+              filename: messages[m].attachments[a].filename,
+              contentType: messages[m].attachments[a].content_type,
+            };
+            attachments.push(attachmentObj);
+            await cooldown();
+          }
         }
+
+        // fetch the message
+        // attach the attachments to this object
+        if (messages.length > 0) {
+          const messageObj = {
+            id: messages[m].id,
+            content: messages[m].content,
+            threadId: messages[m].channel_id,
+            createdAt: messages[m].timestamp,
+            updatedAt: messages[m].edited_timestamp,
+            discordId: messages[m].author.id,
+            hasImages: attachments.length > 0 ? true : false,
+            attachments,
+          };
+          messageResults.push(messageObj);
+
+          // fetch the user for the message, add to user array
+          const userObj = {
+            discordId: messages[m].author.id,
+            discordUsername: messages[m].author.global_name
+              ? messages[m].author.global_name
+              : messages[m].author.username,
+
+            discordAvatarId: messages[m].author.avatar,
+          };
+          userResults.push(userObj);
+        }
+        await cooldown();
       }
 
-      if (messages.length > 0) {
-        const messageObj = {
-          id: messages[m].id,
-          content: messages[m].content,
-          threadId: messages[m].channel_id,
-          createdAt: messages[m].timestamp,
-          updatedAt: messages[m].edited_timestamp,
-          discordId: messages[m].author.id,
-          hasImages: images.length > 0 ? true : false,
-          images,
-          hasReactions: reactions.length > 0 ? true : false,
-          reactions,
-        };
-        messageResults.push(messageObj);
-      }
-      cooldown();
-    }
-
-    const res = {
-      thread: {
-        id: threads[i].id,
-        title: threads[i].name,
-        discordId: threads[i].owner_id,
-        createdAt: threads[i].thread_metadata?.create_timestamp,
-        lastMessageId: threads[i].last_message_id,
-        user: {
+      // get the first message, if there is one. Users will sometimes delete these
+      const firstMessage = first_messages.filter(
+        (mes) => mes.channel_id === threads[i].id,
+      );
+      if (firstMessage.length > 0) {
+        const threadUser = {
           discordId: threads[i].owner_id,
-          discordUsername:
-            first_messages[i] && first_messages[i].author.username,
-          discordAvatarId: first_messages[i] && first_messages[i].author.avatar,
+          discordUsername: firstMessage[0].author.username,
+          discordAvatarId: firstMessage[0].author.avatar,
+          test: "Test",
+        };
+        userResults.push(threadUser);
+      }
+
+      // get the threads details, attach messages and users to the object
+      const res = {
+        thread: {
+          id: threads[i].id,
+          title: threads[i].name,
+          discordId: threads[i].owner_id,
+          createdAt: threads[i].thread_metadata?.create_timestamp,
+          lastMessageId: threads[i].last_message_id,
+          users: userResults,
+          messages: messageResults,
+          tags: threads[i].applied_tags,
         },
-        messages: messageResults,
-        tags: threads[i].applied_tags,
-      },
-    };
+      };
 
-    await prisma.$transaction(
-      async (tx) => {
-        try {
-          await tx.user.upsert({
-            where: {
-              discordId: res.thread.user.discordId,
-            },
-            create: {
-              discordId: res.thread.user.discordId,
-              discordUsername: res.thread.user.discordUsername,
-              discordAvatarId: res.thread.user.discordAvatarId,
-            },
-            update: {
-              discordId: res.thread.user.discordId,
-              discordUsername: res.thread.user.discordUsername,
-              discordAvatarId: res.thread.user.discordAvatarId,
-            },
-          });
-        } catch (err) {
-          console.log("Error:", err);
-        }
+      count++;
 
-        try {
-          await tx.thread.upsert({
-            where: {
-              id: res.thread.id,
-            },
-            create: {
-              id: res.thread.id,
-              title: res.thread.title,
-              discordId: res.thread.user.discordId!,
-              lastMessageId: res.thread.lastMessageId,
-              createdAt: res.thread.createdAt,
-              timestamp: res.thread.createdAt
-                ? res.thread.createdAt
-                : new Date(),
-            },
-            update: {
-              title: res.thread.title,
-              discordId: res.thread.discordId,
-              lastMessageId: res.thread.lastMessageId,
-              createdAt: res.thread.createdAt,
-            },
-          });
-        } catch (err) {
-          console.log("Error:", err);
-        }
+      // get the last time stamp, needed for thread fetching recursion
+      lastTimestamp = threads[i].thread_metadata?.archive_timestamp
+        .split("+")
+        .shift()!;
 
-        for (let txm = 0; txm < res.thread.messages.length; txm++) {
-          const timestamp = res.thread.messages[txm].updatedAt
-            ? res.thread.messages[txm].updatedAt
-            : new Date();
-          try {
-            await tx.message.upsert({
-              where: {
-                id: res.thread.messages[txm].id,
-              },
-              create: {
-                id: res.thread.messages[txm].id,
-                content: res.thread.messages[txm].content,
-                threadId: res.thread.messages[txm].threadId,
-                timestamp: timestamp!,
-                discordId: res.thread.messages[txm].discordId,
-              },
-              update: {
-                content: res.thread.messages[txm].content,
-                threadId: res.thread.messages[txm].threadId,
-                timestamp: timestamp!,
-                discordId: res.thread.messages[txm].discordId,
-              },
-            });
-          } catch (err) {
-            console.log("Error:", err);
-          }
+      // simple, ugly status for export
+      console.log(threads[i].id, threads[i].name, count);
 
-          for (
-            let txi = 0;
-            txi < res.thread.messages[txm].images.length;
-            txi++
-          ) {
-            try {
-              await tx.image.upsert({
-                where: {
-                  id: res.thread.messages[txm].images[txi].id,
-                },
-                create: {
-                  id: res.thread.messages[txm].images[txi].id,
-                  url: res.thread.messages[txm].images[txi].url,
-                  messageId: res.thread.messages[txm].id,
-                  height: res.thread.messages[txm].images[txi].height,
-                  width: res.thread.messages[txm].images[txi].width,
-                },
-                update: {
-                  url: res.thread.messages[txm].images[txi].url,
-                  messageId: res.thread.messages[txm].id,
-                  height: res.thread.messages[txm].images[txi].height,
-                  width: res.thread.messages[txm].images[txi].width,
-                },
-              });
-            } catch (err) {
-              console.log("Error:", err);
-            }
-          }
-
-          for (
-            let txr = 0;
-            txr < res.thread.messages[txm].reactions.length;
-            txr++
-          ) {
-            try {
-              await tx.reaction.upsert({
-                where: {
-                  id: `${res.thread.messages[txm].reactions[txr].name}-${res.thread.messages[txm].id}`,
-                },
-                create: {
-                  id: `${res.thread.messages[txm].reactions[txr].name}-${res.thread.messages[txm].id}`,
-                  animated: res.thread.messages[txm].reactions[txr].animated,
-                  name: res.thread.messages[txm].reactions[txr].name,
-                  messageId: res.thread.messages[txm].id,
-                },
-                update: {
-                  animated: res.thread.messages[txm].reactions[txr].animated,
-                  name: res.thread.messages[txm].reactions[txr].name,
-                },
-              });
-            } catch (err) {
-              console.log("Error:", err);
-            }
-          }
-        }
-      },
-      {
-        timeout: 15000,
-      },
-    );
-
-    count++;
-
-    lastTimestamp = threads[i].thread_metadata?.archive_timestamp
-      .split("+")
-      .shift()!;
-    console.log(threads[i].id, threads[i].name, count);
-
-    results.push(res);
+      results.push(res);
+    }
   }
-
   console.log("has more", has_more, lastTimestamp);
   if (has_more) {
+    // if there are more threads, write a file with the current 'block' number in name
+    const resultsFile = `./exports/results-${block}.json`;
+    await Bun.write(resultsFile, JSON.stringify(results));
+    block++;
     processThreads(lastTimestamp);
   } else {
+    // when done, finish up
+    const resultsFile = `./exports/results-${block}.json`;
+    await Bun.write(resultsFile, JSON.stringify(results));
     console.log("Done");
   }
 };

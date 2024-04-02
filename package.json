@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "start": "bun ./src/index.ts",
+    "import": "bun ./src/import.ts",
     "db:generate": "prisma generate",
     "db:push": "prisma db push --skip-generate"
   },
@@ -11,14 +12,18 @@
     "@types/node": "^20.11.30",
     "bun-types": "latest",
     "discord-api-types": "^0.37.77",
+    "drizzle-kit": "^0.20.14",
     "prisma": "^5.11.0"
   },
   "peerDependencies": {
     "typescript": "^5.0.0"
   },
   "dependencies": {
+    "@planetscale/database": "^1.16.0",
     "@prisma/client": "5.11.0",
     "@segment/analytics-node": "^2.1.0",
+    "drizzle-orm": "^0.30.6",
+    "nanoid": "^5.0.6",
     "prisma-extension-create-with-slug": "^0.0.5"
   }
 }
