@@ -5,7 +5,7 @@ import { createWithSlugFn } from "prisma-extension-create-with-slug";
 const prisma = new PrismaClient().$extends(createWithSlugFn());
 
 // will need to pass this as CLI argument now
-const path = "./results.json";
+const path = Bun.argv[2];
 const file = Bun.file(path);
 
 // load file with types

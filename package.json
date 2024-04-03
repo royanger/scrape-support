@@ -24,6 +24,7 @@
     "@segment/analytics-node": "^2.1.0",
     "drizzle-orm": "^0.30.6",
     "nanoid": "^5.0.6",
-    "prisma-extension-create-with-slug": "^0.0.5"
+    "prisma-extension-create-with-slug": "^0.0.5",
+    "utils": "^0.3.1"
   }
 }
