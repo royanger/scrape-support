@@ -90,6 +90,7 @@ for (let currentFile = 1; currentFile <= parseInt(files); currentFile++) {
             const colorFour = generateRandomColor();
             return {
               background: `radial-gradient(at ${Math.floor(Math.random() * 100)}% ${Math.floor(Math.random() * 100)}%, ${colorOne} 0px, ${colorTwo} 55%),radial-gradient(at ${Math.floor(Math.random() * 100)}% ${Math.floor(Math.random() * 100)}%, ${colorThree} 0px, transparent 55%),radial-gradient(at ${Math.floor(Math.random() * 100)}% ${Math.floor(Math.random() * 100)}%, ${colorFour} 0px, transparent 55%),radial-gradient(at ${Math.floor(Math.random() * 100)}% ${Math.floor(Math.random() * 100)}%, ${colorFour} 0px, transparent 55%),radial-gradient(at ${Math.floor(Math.random() * 100)}% ${Math.floor(Math.random() * 100)}%, ${colorThree} 0px, transparent 55%),radial-gradient(at ${Math.floor(Math.random() * 100)}% ${Math.floor(Math.random() * 100)}%, ${colorTwo} 0px, transparent 55%) `,
+              backgroundColor: `${colorOne}`,
             };
           }
 
