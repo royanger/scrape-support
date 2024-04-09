@@ -66,7 +66,16 @@ for (let currentFile = 1; currentFile <= parseInt(files); currentFile++) {
           let anonymousUsername: string = "";
 
           const generateAnonymousUsername = async (): Promise<void> => {
-            const username = `${friendlyWords.predicates[Math.floor(Math.random() * friendlyWords.predicates.length)]}-${friendlyWords.objects[Math.floor(Math.random() * friendlyWords.objects.length)]}`;
+            const stringOne =
+              friendlyWords.predicates[
+              Math.floor(Math.random() * friendlyWords.predicates.length)
+              ];
+            const stringTwo =
+              friendlyWords.objects[
+              Math.floor(Math.random() * friendlyWords.objects.length)
+              ];
+
+            const username = `${stringOne.charAt(0).toUpperCase()}${stringOne.slice(1)} ${stringTwo.charAt(0).toUpperCase()}${stringTwo.slice(1)}`;
 
             const res = await prisma.user.findUnique({
               where: {
