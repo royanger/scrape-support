@@ -22,7 +22,9 @@
     "@planetscale/database": "^1.16.0",
     "@prisma/client": "5.11.0",
     "@segment/analytics-node": "^2.1.0",
+    "@types/friendly-words": "^1.2.2",
     "drizzle-orm": "^0.30.6",
+    "friendly-words": "^1.2.4",
     "nanoid": "^5.0.6",
     "prisma-extension-create-with-slug": "^0.0.5",
     "utils": "^0.3.1"

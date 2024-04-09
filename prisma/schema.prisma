@@ -10,19 +10,22 @@ datasource db {
 }
 
 model User {
-  id              String         @id @unique @default(uuid())
-  userId          String?        @unique
-  discordId       String?        @unique
-  discordUsername String?
-  discordAvatarId String?
-  banned          Boolean        @default(false)
-  deleted         Boolean        @default(false)
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
-  ticketStatus    TicketStatus[]
-  Thread          Thread[]
-  Message         Message[]
-  Onboarding      Onboarding[]
+  id                String         @id @unique @default(uuid())
+  userId            String?        @unique
+  discordId         String?        @unique
+  discordUsername   String?
+  discordAvatarId   String?
+  anonymousUsername String         @unique
+  anonymousAvatar   Json
+  showUserName      Boolean        @default(false)
+  banned            Boolean        @default(false)
+  deleted           Boolean        @default(false)
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  ticketStatus      TicketStatus[]
+  Thread            Thread[]
+  Message           Message[]
+  Onboarding        Onboarding[]
 }
 
 // formally TagName -- will need to be renamed/migrated to handle current prod data

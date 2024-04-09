@@ -51,6 +51,9 @@ let results = [];
 const processThreads = async (before?: string) => {
   console.log("Starting block of threads");
 
+  // clearing array for recursion
+  results = [];
+
   // store the timestamp of the last thread processed, to used in following query
   let lastTimestamp = "";
 
