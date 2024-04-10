@@ -1,4 +1,8 @@
-import { APIThreadChannel, APIMessage } from "discord-api-types/v10";
+import {
+  APIThreadChannel,
+  APIMessage,
+  APIChannel,
+} from "discord-api-types/v10";
 
 async function cooldown() {
   await new Promise((r) => setTimeout(r, 200));
@@ -44,6 +48,34 @@ const fetchMessages = async (threadId: string, beforeId?: string) => {
   return (await res.json()) as APIMessage[];
 };
 
+async function parseContentForChannel(content: string) {
+  const channelCheck = content.match(/<#(.*)>/);
+  if (channelCheck?.length && channelCheck?.length > 0) {
+    console.log("channelCheck", channelCheck);
+    const res = await fetch(
+      `https://discord.com/api/v10/channels/${channelCheck[1]}`,
+      {
+        headers: {
+          method: "GET",
+          Authorization: `Bot ${Bun.env.DISCORD_TOKEN}`,
+        },
+      },
+    );
+    if (!res.ok) {
+      console.log("error fetching channel:", res.statusText);
+    }
+
+    const channel = (await res.json()) as APIChannel;
+
+    return content.replace(
+      /<#(.*?)>/g,
+      `<span class="channel-name">#${channel.name}</span>`,
+    );
+  } else {
+  }
+  return content;
+}
+
 let count = 0;
 let block = 1;
 let results = [];
@@ -72,121 +104,134 @@ const processThreads = async (before?: string) => {
     // console.log(
     //   "===================================================================",
     // );
+
+    // if the thread is locked, skip it
     if (threads[i].thread_metadata?.locked === false) {
-      let messages: APIMessage[] = [];
-
-      // fetch messages for a thread -- come in up to 50 messages
-      // need to check and fetch again if result === 100
-      const fetchAllMessages = async (threadId: string, beforeId?: string) => {
-        await cooldown();
-
-        // Fetch up to 100 messages, use recursion to continue until all messages for thread fetched
-        const res = await fetchMessages(threadId, beforeId);
-        if (res.length === 100) {
-          console.log("Received 100 messages, attepting to fetch next block");
-          // length starts 1 on, but array starts at 0. This is the 100th message
-          const beforeId = res[99].id;
-          fetchAllMessages(threadId, beforeId);
-        }
-
-        messages = messages.concat(res);
-        return messages;
-      };
-
-      // start fetching messages
-      await fetchAllMessages(threads[i].id);
-      await cooldown();
-
-      // create arrays to fill with the data to export
-      let messageResults = [];
-      let userResults = [];
-
-      for (let m = 0; m < messages.length; m++) {
-        // fetch attachments for the message
-        let attachments = [];
-        if (messages[m].attachments.length > 0) {
-          for (let a = 0; a < messages[m].attachments.length; a++) {
-            const attachmentObj = {
-              id: messages[m].attachments[a].id,
-              url: messages[m].attachments[a].url,
-              width: messages[m].attachments[a].width,
-              height: messages[m].attachments[a].height,
-              filename: messages[m].attachments[a].filename,
-              contentType: messages[m].attachments[a].content_type,
-            };
-            attachments.push(attachmentObj);
-            await cooldown();
-          }
-        }
-
-        // fetch the message
-        // attach the attachments to this object
-        if (messages.length > 0) {
-          const messageObj = {
-            id: messages[m].id,
-            content: messages[m].content,
-            threadId: messages[m].channel_id,
-            createdAt: messages[m].timestamp,
-            updatedAt: messages[m].edited_timestamp,
-            discordId: messages[m].author.id,
-            hasImages: attachments.length > 0 ? true : false,
-            attachments,
-          };
-          messageResults.push(messageObj);
-
-          // fetch the user for the message, add to user array
-          const userObj = {
-            discordId: messages[m].author.id,
-            discordUsername: messages[m].author.global_name
-              ? messages[m].author.global_name
-              : messages[m].author.username,
-
-            discordAvatarId: messages[m].author.avatar,
-          };
-          userResults.push(userObj);
-        }
-        await cooldown();
-      }
-
-      // get the first message, if there is one. Users will sometimes delete these
+      // if the thread has no first message, skip it
       const firstMessage = first_messages.filter(
         (mes) => mes.channel_id === threads[i].id,
       );
       if (firstMessage.length > 0) {
-        const threadUser = {
-          discordId: threads[i].owner_id,
-          discordUsername: firstMessage[0].author.username,
-          discordAvatarId: firstMessage[0].author.avatar,
-          test: "Test",
+        let messages: APIMessage[] = [];
+
+        // fetch messages for a thread -- come in up to 50 messages
+        // need to check and fetch again if result === 100
+        const fetchAllMessages = async (
+          threadId: string,
+          beforeId?: string,
+        ) => {
+          await cooldown();
+
+          // Fetch up to 100 messages, use recursion to continue until all messages for thread fetched
+          const res = await fetchMessages(threadId, beforeId);
+          if (res.length === 100) {
+            console.log("Received 100 messages, attepting to fetch next block");
+            // length starts 1 on, but array starts at 0. This is the 100th message
+            const beforeId = res[99].id;
+            fetchAllMessages(threadId, beforeId);
+          }
+
+          messages = messages.concat(res);
+          return messages;
         };
-        userResults.push(threadUser);
+
+        // start fetching messages
+        await fetchAllMessages(threads[i].id);
+        await cooldown();
+
+        // create arrays to fill with the data to export
+        let messageResults = [];
+        let userResults = [];
+
+        for (let m = 0; m < messages.length; m++) {
+          // fetch attachments for the message
+          let attachments = [];
+          if (messages[m].attachments.length > 0) {
+            for (let a = 0; a < messages[m].attachments.length; a++) {
+              const attachmentObj = {
+                id: messages[m].attachments[a].id,
+                url: messages[m].attachments[a].url,
+                width: messages[m].attachments[a].width,
+                height: messages[m].attachments[a].height,
+                filename: messages[m].attachments[a].filename,
+                contentType: messages[m].attachments[a].content_type,
+              };
+              attachments.push(attachmentObj);
+              await cooldown();
+            }
+          }
+
+          // fetch the message
+          // attach the attachments to this object
+          if (messages.length > 0) {
+            const content = await parseContentForChannel(messages[m].content);
+
+            const messageObj = {
+              id: messages[m].id,
+              content: content,
+              threadId: messages[m].channel_id,
+              createdAt: messages[m].timestamp,
+              updatedAt: messages[m].edited_timestamp,
+              discordId: messages[m].author.id,
+              hasImages: attachments.length > 0 ? true : false,
+              attachments,
+            };
+            messageResults.push(messageObj);
+
+            // fetch the user for the message, add to user array
+            const userObj = {
+              discordId: messages[m].author.id,
+              discordUsername: messages[m].author.global_name
+                ? messages[m].author.global_name
+                : messages[m].author.username,
+
+              discordAvatarId: messages[m].author.avatar,
+            };
+            userResults.push(userObj);
+          }
+          await cooldown();
+        }
+
+        // get the first message, if there is one. Users will sometimes delete these
+        const firstMessage = first_messages.filter(
+          (mes) => mes.channel_id === threads[i].id,
+        );
+        if (firstMessage.length > 0) {
+          const threadUser = {
+            discordId: threads[i].owner_id,
+            discordUsername: firstMessage[0].author.username,
+            discordAvatarId: firstMessage[0].author.avatar,
+            test: "Test",
+          };
+          userResults.push(threadUser);
+        }
+
+        // get the threads details, attach messages and users to the object
+        const res = {
+          thread: {
+            id: threads[i].id,
+            title: threads[i].name,
+            discordId: threads[i].owner_id,
+            createdAt: threads[i].thread_metadata?.create_timestamp,
+            lastMessageId: threads[i].last_message_id,
+            users: userResults,
+            messages: messageResults,
+            tags: threads[i].applied_tags,
+          },
+        };
+
+        count++;
+
+        // get the last time stamp, needed for thread fetching recursion
+        lastTimestamp = threads[i].thread_metadata?.archive_timestamp
+          .split("+")
+          .shift()!;
+
+        // simple, ugly status for export
+        console.log(threads[i].id, threads[i].name, count);
+
+        results.push(res);
       }
-
-      // get the threads details, attach messages and users to the object
-      const res = {
-        thread: {
-          id: threads[i].id,
-          title: threads[i].name,
-          discordId: threads[i].owner_id,
-          createdAt: threads[i].thread_metadata?.create_timestamp,
-          lastMessageId: threads[i].last_message_id,
-          users: userResults,
-          messages: messageResults,
-          tags: threads[i].applied_tags,
-        },
-      };
-
-      count++;
-
-      // get the last time stamp, needed for thread fetching recursion
-      lastTimestamp = threads[i].thread_metadata?.archive_timestamp
-        .split("+")
-        .shift()!;
-
-      // simple, ugly status for export
-      console.log(threads[i].id, threads[i].name, count);
-
-      results.push(res);
     }
   }
   console.log("has more", has_more, lastTimestamp);

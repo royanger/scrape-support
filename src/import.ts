@@ -77,6 +77,7 @@ for (let currentFile = 1; currentFile <= parseInt(files); currentFile++) {
 
             const username = `${stringOne.charAt(0).toUpperCase()}${stringOne.slice(1)} ${stringTwo.charAt(0).toUpperCase()}${stringTwo.slice(1)}`;
 
+            console.log(typeof username);
             const res = await prisma.user.findUnique({
               where: {
                 anonymousUsername: username,
