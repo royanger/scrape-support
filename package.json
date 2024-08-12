@@ -3,7 +3,7 @@
   "module": "./src/index.ts",
   "type": "module",
   "scripts": {
-    "start": "bun ./src/index.ts",
+    "export": "bun ./src/index.ts",
     "import": "bun ./src/import.ts",
     "db:generate": "prisma generate",
     "db:push": "prisma db push --skip-generate"
@@ -21,7 +21,7 @@
   "dependencies": {
     "@planetscale/database": "^1.16.0",
     "@prisma/client": "5.11.0",
-    "@segment/analytics-node": "^2.1.0",
+    "@segment/analytics-node": "^2.1.2",
     "@types/friendly-words": "^1.2.2",
     "drizzle-orm": "^0.30.6",
     "friendly-words": "^1.2.4",

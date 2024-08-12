@@ -3,6 +3,12 @@ import {
   APIMessage,
   APIChannel,
 } from "discord-api-types/v10";
+import {
+  fenceMultilineCode,
+  parseAngleBracketEscape,
+  parseBadTemplatingString,
+  parseUnderline,
+} from "./lib";
 
 async function cooldown() {
   await new Promise((r) => setTimeout(r, 200));
@@ -74,6 +80,10 @@ async function parseContentForChannel(content: string) {
   } else {
   }
   return content;
+}
+
+async function parseContentForLink(content: string) {
+  return content.replace(/<http(.*?)>/g, "[http$1](http$1)");
 }
 
 let count = 0;
@@ -155,7 +165,9 @@ const processThreads = async (before?: string) => {
                 height: messages[m].attachments[a].height,
                 filename: messages[m].attachments[a].filename,
                 contentType: messages[m].attachments[a].content_type,
+                size: messages[m].attachments[a].size,
               };
+              console.log("attachment", attachmentObj);
               attachments.push(attachmentObj);
               await cooldown();
             }
@@ -164,7 +176,14 @@ const processThreads = async (before?: string) => {
           // fetch the message
           // attach the attachments to this object
           if (messages.length > 0) {
-            const content = await parseContentForChannel(messages[m].content);
+            const tmp = await parseContentForChannel(messages[m].content);
+            const content = await parseContentForLink(
+              fenceMultilineCode(
+                parseUnderline(
+                  parseBadTemplatingString(parseAngleBracketEscape(tmp)),
+                ),
+              ),
+            );
 
             const messageObj = {
               id: messages[m].id,
@@ -178,16 +197,22 @@ const processThreads = async (before?: string) => {
             };
             messageResults.push(messageObj);
 
-            // fetch the user for the message, add to user array
-            const userObj = {
-              discordId: messages[m].author.id,
-              discordUsername: messages[m].author.global_name
-                ? messages[m].author.global_name
-                : messages[m].author.username,
+            // fetch the user for the message, add to user array if not already present
+            if (
+              !userResults.some(
+                (user) => user.discordId === messages[m].author.id,
+              )
+            ) {
+              const userObj = {
+                discordId: messages[m].author.id,
+                discordUsername: messages[m].author.global_name
+                  ? messages[m].author.global_name
+                  : messages[m].author.username,
 
-              discordAvatarId: messages[m].author.avatar,
-            };
-            userResults.push(userObj);
+                discordAvatarId: messages[m].author.avatar,
+              };
+              userResults.push(userObj);
+            }
           }
           await cooldown();
         }
@@ -201,7 +226,6 @@ const processThreads = async (before?: string) => {
             discordId: threads[i].owner_id,
             discordUsername: firstMessage[0].author.username,
             discordAvatarId: firstMessage[0].author.avatar,
-            test: "Test",
           };
           userResults.push(threadUser);
         }
@@ -237,7 +261,7 @@ const processThreads = async (before?: string) => {
   console.log("has more", has_more, lastTimestamp);
   if (has_more) {
     // if there are more threads, write a file with the current 'block' number in name
-    const resultsFile = `./exports/results-${block}.json`;
+    const resultsFile = `./exports2/results-${block}.json`;
     await Bun.write(resultsFile, JSON.stringify(results));
     block++;
     processThreads(lastTimestamp);

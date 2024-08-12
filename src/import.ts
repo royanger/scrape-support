@@ -1,9 +1,13 @@
 import { PrismaClient } from "@prisma/client";
 import { createWithSlugFn } from "prisma-extension-create-with-slug";
 import friendlyWords from "friendly-words";
+import { Analytics } from "@segment/analytics-node";
 
 // load prisma with slugify plugin
 const prisma = new PrismaClient().$extends(createWithSlugFn());
+
+// Instantiate Segment
+const analytics = new Analytics({ writeKey: Bun.env.SEGMENT_WRITE_KEY });
 
 // will need to pass this as CLI argument now
 const files = Bun.argv[2];
@@ -13,7 +17,6 @@ let count = 1;
 for (let currentFile = 1; currentFile <= parseInt(files); currentFile++) {
   console.log("File:", currentFile);
   const file = Bun.file(`./exports/results-${currentFile}.json`);
-  // const file = Bun.file("./exports/results-1.json");
 
   // load file with types
   const contents: Thread[] = await file.json();
@@ -54,9 +57,24 @@ for (let currentFile = 1; currentFile <= parseInt(files); currentFile++) {
     height?: number;
     filename: string;
     contentType: string;
+    size: number;
   }
 
   for (let t = 0; t < contents.length; t++) {
+    // Segment - thread archiving (if needed)
+    //
+    // Discord_Support_Thread Created
+    //
+    // Discord_Support_Thread Updated - title, locked, closed, open, tags changed
+    //
+    // -- send new title if changed, send tags
+    //
+    // Discord_Support_Message Created
+    //
+    // Discord_Support_Message Updated
+
+    // -- send new body
+
     // start a transaction for each thread and its associated data
     await prisma.$transaction(
       async (tx) => {
@@ -77,7 +95,6 @@ for (let currentFile = 1; currentFile <= parseInt(files); currentFile++) {
 
             const username = `${stringOne.charAt(0).toUpperCase()}${stringOne.slice(1)} ${stringTwo.charAt(0).toUpperCase()}${stringTwo.slice(1)}`;
 
-            console.log(typeof username);
             const res = await prisma.user.findUnique({
               where: {
                 anonymousUsername: username,
@@ -114,6 +131,11 @@ for (let currentFile = 1; currentFile <= parseInt(files); currentFile++) {
           const anonymousAvatar = generateRandomGradient();
 
           try {
+            console.log(
+              "user and array index",
+              contents[t].thread.users[u].discordId,
+              u,
+            );
             const res = await tx.user.upsert({
               where: {
                 discordId: contents[t].thread.users[u].discordId,
@@ -123,11 +145,21 @@ for (let currentFile = 1; currentFile <= parseInt(files); currentFile++) {
                 discordUsername: contents[t].thread.users[u].discordUsername,
                 discordAvatarId: contents[t].thread.users[u].discordAvatarId,
                 anonymousUsername: anonymousUsername,
-                anonymousAvatar: anonymousAvatar,
+                anonymousAvatar: JSON.stringify(anonymousAvatar),
               },
               update: {
                 discordUsername: contents[t].thread.users[u].discordUsername,
                 discordAvatarId: contents[t].thread.users[u].discordAvatarId,
+              },
+            });
+
+            analytics.track({
+              userId: contents[t].thread.users[u].discordId,
+              event: "Discord_Support_User Created",
+              properties: {
+                discordId: contents[t].thread.users[u].discordId,
+                clerkUserId: "",
+                discordUsername: contents[t].thread.users[u].discordUsername,
               },
             });
           } catch (err) {
@@ -137,25 +169,38 @@ for (let currentFile = 1; currentFile <= parseInt(files); currentFile++) {
 
         // create the thread. Need a 3 part query because of slugify plugin
         try {
+          console.log("thread id", contents[t].thread.id);
           const existingThread = await prisma.thread.findUnique({
             where: {
               id: contents[t].thread.id,
             },
           });
           if (!existingThread?.id) {
+            console.log("trying to create thread:", contents[t].thread.id);
             await prisma.thread.createWithSlug({
               data: {
                 id: contents[t].thread.id,
                 title: contents[t].thread.title,
                 discordId: contents[t].thread.discordId!,
-                lastMessageId: contents[t].thread.lastMessageId,
-                createdAt: contents[t].thread.createdAt,
+                timestamp: contents[t].thread.createdAt,
               },
               sourceField: "title",
               targetField: "slug",
               unique: true,
             });
+            analytics.track({
+              userId: contents[t].thread.discordId!,
+              event: "Discord_Support_Thread Created",
+              properties: {
+                threadId: contents[t].thread.id,
+                title: contents[t].thread.title,
+                discordId: contents[t].thread.discordId!,
+                createdAt: contents[t].thread.createdAt,
+                // updatedAt: contents[t].thread.
+              },
+            });
           } else {
+            console.log("trying to update thread:", contents[t].thread.id);
             await prisma.thread.update({
               where: {
                 id: contents[t].thread.id,
@@ -163,8 +208,7 @@ for (let currentFile = 1; currentFile <= parseInt(files); currentFile++) {
               data: {
                 title: contents[t].thread.title,
                 discordId: contents[t].thread.discordId,
-                lastMessageId: contents[t].thread.lastMessageId,
-                updatedAt: new Date(),
+                timestamp: contents[t].thread.createdAt,
               },
             });
           }
@@ -179,6 +223,10 @@ for (let currentFile = 1; currentFile <= parseInt(files); currentFile++) {
             : contents[t].thread.messages[txm].createdAt;
 
           try {
+            console.log(
+              "upserting message:",
+              contents[t].thread.messages[txm].id,
+            );
             const res = await tx.message.upsert({
               where: {
                 id: contents[t].thread.messages[txm].id,
@@ -188,14 +236,27 @@ for (let currentFile = 1; currentFile <= parseInt(files); currentFile++) {
                 content: contents[t].thread.messages[txm].content,
                 threadId: contents[t].thread.messages[txm].threadId,
                 discordId: contents[t].thread.messages[txm].discordId,
-                createdAt: contents[t].thread.messages[txm].createdAt,
-                updatedAt,
+                timestamp: contents[t].thread.messages[txm].createdAt,
               },
               update: {
                 content: contents[t].thread.messages[txm].content,
                 threadId: contents[t].thread.messages[txm].threadId,
                 discordId: contents[t].thread.messages[txm].discordId,
-                updatedAt,
+                timestamp: updatedAt,
+              },
+            });
+
+            analytics.track({
+              userId: contents[t].thread.messages[txm].discordId,
+              event: "Discord_Support_Message Created",
+              properties: {
+                messageId: contents[t].thread.messages[txm].id,
+                threadId: contents[t].thread.messages[txm].threadId,
+                tags: contents[t].thread.messages[txm].tags,
+                discordId: contents[t].thread.messages[txm].discordId,
+                createdAt: contents[t].thread.messages[txm].createdAt,
+                updatedAt: contents[t].thread.messages[txm].updatedAt,
+                content: contents[t].thread.messages[txm].content,
               },
             });
           } catch (err) {
@@ -228,6 +289,11 @@ for (let currentFile = 1; currentFile <= parseInt(files); currentFile++) {
                     contentType:
                       contents[t].thread.messages[txm].attachments[txi]
                         .contentType,
+                    size: contents[t].thread.messages[txm].attachments[txi]
+                      .size,
+                    filename:
+                      contents[t].thread.messages[txm].attachments[txi]
+                        .filename,
                   },
                   update: {
                     url: contents[t].thread.messages[txm].attachments[txi].url,
@@ -239,6 +305,11 @@ for (let currentFile = 1; currentFile <= parseInt(files); currentFile++) {
                     contentType:
                       contents[t].thread.messages[txm].attachments[txi]
                         .contentType,
+                    size: contents[t].thread.messages[txm].attachments[txi]
+                      .size,
+                    filename:
+                      contents[t].thread.messages[txm].attachments[txi]
+                        .filename,
                   },
                 });
               } catch (err) {

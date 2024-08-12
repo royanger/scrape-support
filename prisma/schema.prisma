@@ -16,7 +16,7 @@ model User {
   discordUsername   String?
   discordAvatarId   String?
   anonymousUsername String         @unique
-  anonymousAvatar   Json
+  anonymousAvatar   String         @db.LongText
   showUserName      Boolean        @default(false)
   banned            Boolean        @default(false)
   deleted           Boolean        @default(false)
@@ -69,17 +69,17 @@ model Onboarding {
 }
 
 model Thread {
-  id            String      @id
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime?
-  title         String      @db.LongText
-  isPublic      Boolean     @default(false)
-  discordId     String
-  author        User        @relation(fields: [discordId], references: [discordId])
-  lastMessageId String?
-  slug          String      @unique
-  tags          ThreadTag[]
-  messages      Message[]
+  id        String      @id
+  createdAt DateTime?   @default(now())
+  updatedAt DateTime?
+  timestamp DateTime?
+  title     String      @db.LongText
+  isPublic  Boolean     @default(false)
+  discordId String
+  author    User        @relation(fields: [discordId], references: [discordId])
+  slug      String      @unique
+  tags      ThreadTag[]
+  messages  Message[]
 
   @@index([discordId])
   @@fulltext([title])
@@ -99,8 +99,9 @@ model ThreadTag {
 
 model Message {
   id          String       @id
-  createdAt   DateTime     @default(now())
+  createdAt   DateTime?    @default(now())
   updatedAt   DateTime?
+  timestamp   DateTime?
   content     String       @db.LongText
   threadId    String
   thread      Thread       @relation(fields: [threadId], references: [id])
@@ -112,14 +113,15 @@ model Message {
   @@fulltext([content])
 }
 
-// anything at all that would serve as a name/info for an alt tag?
 model Attachment {
   id          String  @id
   url         String  @db.LongText
   messageId   String
   width       Int?
   height      Int?
-  contentType String?
+  contentType String
+  size        Int
+  filename    String
   message     Message @relation(fields: [messageId], references: [id])
 
   @@index([messageId])

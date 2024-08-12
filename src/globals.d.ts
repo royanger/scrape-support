@@ -6,5 +6,6 @@ declare module "bun" {
     DATABASE_PASSWORD: string;
     DISCORD_TOKEN: string;
     DISCORD_FORUM: string;
+    SEGMENT_WRITE_KEY: string;
   }
 }
