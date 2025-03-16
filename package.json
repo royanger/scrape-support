@@ -1,30 +1,30 @@
 {
   "name": "archive-support",
-  "module": "./src/index.ts",
+  "module": "./src/export.ts",
   "type": "module",
   "scripts": {
-    "export": "bun ./src/index.ts",
+    "export": "bun ./src/export.ts",
     "import": "bun ./src/import.ts",
-    "db:generate": "prisma generate",
-    "db:push": "prisma db push --skip-generate"
+    "db:push": "pnpm drizzle-kit push"
   },
   "devDependencies": {
     "@types/node": "^20.11.30",
     "bun-types": "latest",
     "discord-api-types": "^0.37.77",
-    "drizzle-kit": "^0.20.14",
-    "prisma": "^5.11.0"
+    "drizzle-kit": "^0.30.5",
+    "tsx": "^4.19.3"
   },
   "peerDependencies": {
     "typescript": "^5.0.0"
   },
   "dependencies": {
     "@planetscale/database": "^1.16.0",
-    "@prisma/client": "5.11.0",
-    "@segment/analytics-node": "^2.1.2",
+    "@sindresorhus/slugify": "^2.2.1",
     "@types/friendly-words": "^1.2.2",
-    "drizzle-orm": "^0.30.6",
+    "dotenv": "^16.4.7",
+    "drizzle-orm": "^0.40.0",
     "friendly-words": "^1.2.4",
+    "log4js": "^6.9.1",
     "nanoid": "^5.0.6",
     "prisma-extension-create-with-slug": "^0.0.5",
     "utils": "^0.3.1"
