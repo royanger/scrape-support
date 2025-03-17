@@ -67,7 +67,7 @@ for (let currentFile = 1; currentFile <= parseInt(files); currentFile++) {
     tags: string[];
   }
 
-  const usersSet = new Set()
+  const usersMap = new Map()
   const messageSet = new Set()
   const threadTagSet = new Set()
 
@@ -78,13 +78,8 @@ for (let currentFile = 1; currentFile <= parseInt(files); currentFile++) {
       // loop over all users from thread (author, bots, people who replied)
       // add all to DB
       for (let u = 0; u < contents[t].thread.users.length; u++) {
-        const usersIter = usersSet.entries();
-        const userArray = []
-        for (const user of usersIter) {
-          userArray.push(user)
-        }
 
-        if (!usersSet.has(contents[t].thread.users[u].userId)) {
+        if (!usersMap.has(contents[t].thread.users[u].userId)) {
           let anonymousUsername: string = "";
 
           const generateAnonymousUsername = async (): Promise<void> => {
@@ -148,21 +143,25 @@ for (let currentFile = 1; currentFile <= parseInt(files); currentFile++) {
                 }
               })
 
+            const userRes = await tx.query.user.findFirst({
+              where: eq(schema.user.discordId, contents[t].thread.users[u].userId)
+            })
 
-            usersSet.add(contents[t].thread.users[u].userId)
-            logger.info(`User: ${usersSet.size} - ${contents[t].thread.users[u].userId} - ${contents[t].thread.users[u].discordUsername}`)
+
+            usersMap.set(contents[t].thread.users[u].userId, userRes?.id)
+            logger.info(`User: ${usersMap.size} - ${contents[t].thread.users[u].userId} - ${contents[t].thread.users[u].discordUsername}`)
           } catch (err) {
-            logger.error(`USer: Error inserting user ${usersSet.size} - ${contents[t].thread.users[u].userId} - ${JSON.stringify(err)}`)
+            logger.error(`USer: Error inserting user ${usersMap.size} - ${contents[t].thread.users[u].userId} - ${JSON.stringify(err)}`)
           }
         }
       }
 
-      if (usersSet.has(contents[t].thread.ownerId)) {
+      if (usersMap.has(contents[t].thread.ownerId)) {
         try {
           const threadObj = {
             title: contents[t].thread.title,
             createdAt: new Date(contents[t].thread.createdAt),
-            userId: contents[t].thread.ownerId,
+            userId: usersMap.get(contents[t].thread.ownerId),
             slug: slugify(contents[t].thread.title),
           }
 
@@ -189,14 +188,14 @@ for (let currentFile = 1; currentFile <= parseInt(files); currentFile++) {
       // loop over messages. Check to make sure there are messages
       for (let txm = 0; txm < contents[t].thread.messages.length; txm++) {
 
-        if (usersSet.has(contents[t].thread.messages[txm].userId)) {
+        if (usersMap.has(contents[t].thread.messages[txm].userId)) {
 
           try {
             const messageObj = {
               threadId: contents[t].thread.messages[txm].threadId,
               content: contents[t].thread.messages[txm].content,
               createdAt: new Date(contents[t].thread.messages[txm].createdAt),
-              userId: contents[t].thread.messages[txm].userId
+              userId: usersMap.get(contents[t].thread.messages[txm].userId)
             }
 
             await tx.insert(schema.message)
@@ -244,9 +243,10 @@ for (let currentFile = 1; currentFile <= parseInt(files); currentFile++) {
         }
       }
 
-      console.log(`Done thread ${threadCount} -- ${contents[t].thread.title}  ${contents[t].thread.id}`);
       threadCount++;
     },
     );
   }
 }
+
+console.log('Done')
